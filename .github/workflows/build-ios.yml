@@ -15,47 +15,34 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Build Tools & ldid
+      - name: Install ldid for iOS Signing
         run: |
-          brew install cmake ninja pkg-config ldid
+          brew install ldid
+
+      - name: Generate Xcode Project via VPC
+        working-directory: ./hl2sb-src-master/src
+        run: |
+          chmod +x ./devtools/bin/osx32/vpc ./creategameprojects.sh || true
+          cat ./creategameprojects.sh
+          ./devtools/bin/osx32/vpc /hl2 +game /mksln games || ./creategameprojects.sh
 
       - name: Build client.dylib and server.dylib for iOS arm64
+        working-directory: ./hl2sb-src-master/src
         run: |
-          cd hl2sb-src-master
-          if [ -f "CMakeLists.txt" ]; then
-            cmake -B build-ios -G Ninja \
-              -DCMAKE_SYSTEM_NAME=iOS \
-              -DCMAKE_OSX_ARCHITECTURES=arm64 \
-              -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
-              -DCMAKE_BUILD_TYPE=Release
-            cmake --build build-ios --target client server -j$(sysctl -n hw.ncpu)
-          elif [ -f "wscript" ]; then
-            python3 ./waf configure --ios --arch=arm64 -T release
-            python3 ./waf build --targets=client,server
-          elif [ -f "src/CMakeLists.txt" ]; then
-            cmake -S src -B build-ios -G Ninja \
-              -DCMAKE_SYSTEM_NAME=iOS \
-              -DCMAKE_OSX_ARCHITECTURES=arm64 \
-              -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
-              -DCMAKE_BUILD_TYPE=Release
-            cmake --build build-ios --target client server -j$(sysctl -n hw.ncpu)
-          elif [ -f "src/wscript" ]; then
-            cd src
-            python3 ./waf configure --ios --arch=arm64 -T release
-            python3 ./waf build --targets=client,server
-          elif [ -d "src" ]; then
-            echo "Found VPC source tree. Listing files inside hl2sb-src-master/src:"
-            ls -la src
-            exit 1
-          else
-            echo "Listing files inside hl2sb-src-master:"
-            ls -la
-            exit 1
-          fi
+          xcodebuild -list -project games.xcodeproj
+          xcodebuild -project games.xcodeproj \
+            -alltargets \
+            -configuration Release \
+            -sdk iphoneos \
+            ARCHS="arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            IPHONEOS_DEPLOYMENT_TARGET="13.0" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
 
       - name: Pseudo-Sign Dylibs for iOS (ldid)
         run: |
-          find . -name "client.dylib" -o -name "server.dylib" | xargs ldid -S
+          find . -name "*.dylib" | xargs ldid -S || true
 
       - name: Upload iOS arm64 Dylibs
         uses: actions/upload-artifact@v4
@@ -64,3 +51,4 @@ jobs:
           path: |
             **/client.dylib
             **/server.dylib
+            **/*.dylib
