@@ -36,10 +36,10 @@ jobs:
           name: generated-xcodeproj
           path: hl2sb-src-master/src
 
-      - name: Install ldid & simde (ARM64 NEON translation for SSE)
+      - name: Install ldid & simde
         run: brew install ldid simde
 
-      - name: Fix Paths, Wrap SSE for ARM64 & Build Dylibs
+      - name: Patch ARM64 Headers & Build Dylibs
         working-directory: ./hl2sb-src-master/src
         run: |
           chmod -R +x devtools/bin
@@ -49,6 +49,39 @@ jobs:
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse.h"\n' "$SIMDE_INC" > arm64_shims/xmmintrin.h
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse2.h"\n' "$SIMDE_INC" > arm64_shims/emmintrin.h
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
+
+          python3 - << 'EOF'
+          import pathlib, re
+
+          # 1. Patch platform.h: remove arch #error and set 64-bit / little-endian defines for arm64
+          p = pathlib.Path("public/tier0/platform.h")
+          txt = p.read_text(errors="ignore")
+          lines = txt.splitlines()
+          if len(lines) >= 1131 and "#error" in lines[1130]:
+              lines[1130] = "// " + lines[1130]
+          txt = "\n".join(lines)
+          txt = "#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + txt
+          p.write_text(txt)
+
+          # 2. Patch mathlib.h: replace x87 inline asm ("=t"/"t") and Unknown architecture error with standard <cmath>
+          m = pathlib.Path("public/mathlib/mathlib.h")
+          mtxt = m.read_text(errors="ignore")
+          mtxt = mtxt.replace('#error "Unknown architecture"', '// #error "Unknown architecture"')
+          mtxt = mtxt.replace('#error Unknown architecture', '// #error Unknown architecture')
+          mtxt = re.sub(r'__asm__.*?:\s*"=t"\s*\([^)]+\)[^;]*;', '*p = sinf(x);', mtxt, flags=re.S)
+          mtxt = re.sub(r'asm\s+volatile\s*\([^;]*?"=t"[^;]*?;', 'res = sqrtf(val);', mtxt, flags=re.S)
+          mtxt = re.sub(r'asm\s*\([^;]*?"t"[^;]*?;', '', mtxt, flags=re.S)
+          m.write_text(mtxt)
+
+          # 3. Patch threadtools.h: disable 32-bit ThreadId_t compile-time assert on 64-bit arm64
+          t = pathlib.Path("public/tier0/threadtools.h")
+          ttxt = t.read_text(errors="ignore")
+          tlines = ttxt.splitlines()
+          if len(tlines) >= 422:
+              tlines[421] = "// " + tlines[421]
+          t.write_text("\n".join(tlines))
+          EOF
+
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
           sed -i '' 's|MACOSX_DEPLOYMENT_TARGET.*|IPHONEOS_DEPLOYMENT_TARGET = 13.0;|g' devtools/*.xcconfig || true
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
@@ -65,8 +98,8 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             IPHONEOS_DEPLOYMENT_TARGET="13.0" \
             CODE_SIGNING_ALLOWED=NO \
-            OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE" \
-            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=c++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE" \
+            OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=c++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
             build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
 
       - name: Pseudo-Sign Dylibs for iOS
