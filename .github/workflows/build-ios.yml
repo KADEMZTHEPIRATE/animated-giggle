@@ -53,7 +53,7 @@ jobs:
           python3 - << 'EOF'
           import pathlib, re
 
-          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time(), map malloc_usable_size, and make HMODULE void*
+          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
           p = pathlib.Path("public/tier0/platform.h")
           lines = p.read_text(errors="ignore").splitlines()
           for idx, line in enumerate(lines):
@@ -144,6 +144,13 @@ jobs:
                   mplines[idx] = re.sub(r'\bunsigned(?:\s+int)?\b', 'uintptr_t', mplines[idx])
                   mplines[idx] = re.sub(r'\buint\w*\b', 'uintptr_t', mplines[idx])
               mp.write_text("#include <stdint.h>\n" + "\n".join(mplines))
+
+          # 10. Patch tier1/kvpacker.cpp: replace 32-bit (int) pointer cast on line 148 with (intptr_t)
+          for kv in pathlib.Path(".").rglob("kvpacker.cpp"):
+              klines = kv.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 144), min(len(klines), 152)):
+                  klines[idx] = re.sub(r'\(\s*int\s*\)', '(intptr_t)', klines[idx])
+              kv.write_text("#include <stdint.h>\n" + "\n".join(klines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
