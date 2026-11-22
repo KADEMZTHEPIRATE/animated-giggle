@@ -46,6 +46,8 @@ jobs:
           sed -i '' 's|MACOSX_DEPLOYMENT_TARGET.*|IPHONEOS_DEPLOYMENT_TARGET = 13.0;|g' devtools/*.xcconfig || true
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
           sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
+          sed -i '' 's|-msse[0-9.]*||g; s|-mfpmath=sse||g; s|-arch i386||g; s|-arch x86_64||g; s|-m32||g' devtools/*.xcconfig games.xcodeproj/project.pbxproj || true
+          set -o pipefail
           xcodebuild -project games.xcodeproj \
             -alltargets \
             -configuration Release \
@@ -54,7 +56,9 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             IPHONEOS_DEPLOYMENT_TARGET="13.0" \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            OTHER_CFLAGS="\$(inherited) -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -std=c++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE" \
+            build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED"
 
       - name: Pseudo-Sign Dylibs for iOS
         run: find . -name "*.dylib" -exec ldid -S {} + || true
