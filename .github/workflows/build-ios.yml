@@ -53,31 +53,44 @@ jobs:
           python3 - << 'EOF'
           import pathlib, re
 
-          # 1. Patch platform.h: remove arch #error and set 64-bit / little-endian defines for arm64
+          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time()
           p = pathlib.Path("public/tier0/platform.h")
           txt = p.read_text(errors="ignore")
+          txt = re.sub(r'__asm__\s+__volatile__\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', txt, flags=re.S)
+          txt = re.sub(r'asm\s+volatile\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', txt, flags=re.S)
           lines = txt.splitlines()
-          if len(lines) >= 1131 and "#error" in lines[1130]:
-              lines[1130] = "// " + lines[1130]
-          txt = "\n".join(lines)
-          txt = "#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + txt
+          for idx, line in enumerate(lines):
+              if '"=a"' in line or "'=a'" in line:
+                  for k in range(max(0, idx-3), min(len(lines), idx+4)):
+                      if "asm" in lines[k] or "=a" in lines[k] or "=d" in lines[k] or "rdtsc" in lines[k]:
+                          lines[k] = "// " + lines[k]
+          txt = "#include <mach/mach_time.h>\n#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + "\n".join(lines)
           p.write_text(txt)
 
-          # 2. Patch mathlib.h: replace x87 inline asm ("=t"/"t") and Unknown architecture error with standard <cmath>
+          # 2. Patch mathlib.h: replace x87 fsincos/fsqrt (=t / t) with standard sinf/cosf/sqrtf
           m = pathlib.Path("public/mathlib/mathlib.h")
           mtxt = m.read_text(errors="ignore")
           mtxt = mtxt.replace('#error "Unknown architecture"', '// #error "Unknown architecture"')
           mtxt = mtxt.replace('#error Unknown architecture', '// #error Unknown architecture')
-          mtxt = re.sub(r'__asm__.*?:\s*"=t"\s*\([^)]+\)[^;]*;', '*p = sinf(x);', mtxt, flags=re.S)
-          mtxt = re.sub(r'asm\s+volatile\s*\([^;]*?"=t"[^;]*?;', 'res = sqrtf(val);', mtxt, flags=re.S)
-          mtxt = re.sub(r'asm\s*\([^;]*?"t"[^;]*?;', '', mtxt, flags=re.S)
-          m.write_text(mtxt)
+          mtxt = re.sub(
+              r'inline\s+void\s+SinCos\s*\(\s*float\s+radians\s*,\s*float\s*\*\s*sine\s*,\s*float\s*\*\s*cosine\s*\)\s*\{.*?\n\}',
+              'inline void SinCos( float radians, float *sine, float *cosine ) { *sine = sinf(radians); *cosine = cosf(radians); }',
+              mtxt, flags=re.S
+          )
+          mlines = mtxt.splitlines()
+          for idx, line in enumerate(mlines):
+              if '"=t"' in line or '"t"' in line:
+                  for k in range(max(0, idx-4), min(len(mlines), idx+4)):
+                      if any(w in mlines[k] for w in ["asm", "=t", '"t"', "fsin", "fcos", "fsqrt", "fld", "fstp"]):
+                          mlines[k] = "// " + mlines[k]
+          m.write_text("#include <cmath>\n" + "\n".join(mlines))
 
-          # 3. Patch threadtools.h: disable 32-bit ThreadId_t compile-time assert on 64-bit arm64
+          # 3. Patch threadtools.h: add default constructor to CInterlockedIntT and skip 32-bit ThreadId_t assert
           t = pathlib.Path("public/tier0/threadtools.h")
           ttxt = t.read_text(errors="ignore")
+          ttxt = ttxt.replace("CInterlockedIntT( T value )", "CInterlockedIntT() : m_value( 0 ) {}\n\tCInterlockedIntT( T value )")
           tlines = ttxt.splitlines()
-          if len(tlines) >= 422:
+          if len(tlines) >= 422 and "COMPILE_TIME_ASSERT" in tlines[421]:
               tlines[421] = "// " + tlines[421]
           t.write_text("\n".join(tlines))
           EOF
