@@ -43,7 +43,7 @@ jobs:
         working-directory: ./hl2sb-src-master/src
         run: |
           chmod -R +x devtools/bin
-          mkdir -p arm64_shims
+          mkdir -p arm64_shims ios_build_out
           SIMDE_INC="$(brew --prefix simde)/include"
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/mmx.h"\n' "$SIMDE_INC" > arm64_shims/mmintrin.h
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse.h"\n' "$SIMDE_INC" > arm64_shims/xmmintrin.h
@@ -156,7 +156,7 @@ jobs:
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
               if len(dlines) > 253:
-                  dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
+                  dlines = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines)
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
 
           # 12. Patch tier1/checksum_crc.cpp: replace 32-bit pointer alignment cast on line 150 with uintptr_t
