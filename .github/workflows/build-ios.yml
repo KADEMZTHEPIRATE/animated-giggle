@@ -21,7 +21,7 @@ jobs:
       - name: Generate Xcode Project via VPC
         working-directory: ./hl2sb-src-master/src
         run: |
-          chmod +x ./devtools/bin/vpc ./creategameprojects.sh
+          chmod +x ./devtools/bin/* ./creategameprojects.sh
           ./creategameprojects.sh
           ls -la *.xcodeproj || true
 
@@ -50,4 +50,3 @@ jobs:
             **/client.dylib
             **/server.dylib
             **/*.dylib
-
