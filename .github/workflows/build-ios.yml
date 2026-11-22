@@ -156,7 +156,7 @@ jobs:
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
               if len(dlines) > 253:
-                  dlines = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines)
+                  dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
 
           # 12. Patch tier1/checksum_crc.cpp: replace 32-bit pointer alignment cast on line 150 with uintptr_t
