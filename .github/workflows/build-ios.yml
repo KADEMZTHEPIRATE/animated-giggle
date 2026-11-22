@@ -43,7 +43,7 @@ jobs:
         working-directory: ./hl2sb-src-master/src
         run: |
           chmod -R +x devtools/bin
-          mkdir -p arm64_shims ios_build_out
+          mkdir -p arm64_shims
           SIMDE_INC="$(brew --prefix simde)/include"
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/mmx.h"\n' "$SIMDE_INC" > arm64_shims/mmintrin.h
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse.h"\n' "$SIMDE_INC" > arm64_shims/xmmintrin.h
@@ -156,7 +156,7 @@ jobs:
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
               if len(dlines) > 253:
-                  dlines = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines)
+                  dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
 
           # 12. Patch tier1/checksum_crc.cpp: replace 32-bit pointer alignment cast on line 150 with uintptr_t
@@ -185,3 +185,17 @@ jobs:
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
           sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
           sed -i '' 's|CC = .*||g; s|CPLUSPLUS = .*||g' devtools/*.xcconfig || true
+      - name: Collect & Pseudo-Sign Dylibs for iOS
+        run: |
+          mkdir -p final_ios_dylibs
+          find . ~/Library/Developer/Xcode/DerivedData \( -name "*client*.dylib" -o -name "*client*.so" -o -name "*server*.dylib" -o -name "*server*.so" -o -name "*.dylib" \) 2>/dev/null || true
+          find . ~/Library/Developer/Xcode/DerivedData \( -name "*client*.dylib" -o -name "*client*.so" \) -exec cp {} final_ios_dylibs/client.dylib \; 2>/dev/null || true
+          find . ~/Library/Developer/Xcode/DerivedData \( -name "*server*.dylib" -o -name "*server*.so" \) -exec cp {} final_ios_dylibs/server.dylib \; 2>/dev/null || true
+          ls -lh final_ios_dylibs/
+          ldid -S final_ios_dylibs/*.dylib || true
+
+      - name: Upload iOS arm64 Dylibs
+        uses: actions/upload-artifact@v4
+        with:
+          name: hl2sbpp-ios-arm64-dylibs
+          path: final_ios_dylibs/*
