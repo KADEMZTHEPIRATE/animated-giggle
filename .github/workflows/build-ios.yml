@@ -151,6 +151,14 @@ jobs:
               for idx in range(max(0, 144), min(len(klines), 152)):
                   klines[idx] = re.sub(r'\(\s*int\s*\)', '(intptr_t)', klines[idx])
               kv.write_text("#include <stdint.h>\n" + "\n".join(klines))
+
+          # 11. Patch public/tier1/datamanager.h: replace 32-bit unsigned / uint* pointer cast on line 254 with uintptr_t
+          for dm in pathlib.Path(".").rglob("datamanager.h"):
+              dlines = dm.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 250), min(len(dlines), 258)):
+                  dlines[idx] = re.sub(r'\bunsigned(?:\s+int)?\b', 'uintptr_t', dlines[idx])
+                  dlines[idx] = re.sub(r'\buint\w*\b', 'uintptr_t', dlines[idx])
+              dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
