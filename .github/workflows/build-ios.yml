@@ -18,7 +18,6 @@ jobs:
           touch game/shared/gamestats.h
           chmod +x ./devtools/bin/* ./creategameprojects.sh
           ./devtools/bin/vpc_linux /osx32 /hl2mp +game /mksln games || ./devtools/bin/vpc_linux /osx64 /hl2mp +game /mksln games
-          ls -la *.xcodeproj
 
       - name: Save Generated Project Files
         uses: actions/upload-artifact@v4
@@ -40,10 +39,13 @@ jobs:
       - name: Install ldid
         run: brew install ldid
 
-      - name: Build client.dylib and server.dylib for iOS arm64
+      - name: Fix Paths & Build client.dylib and server.dylib for iOS arm64
         working-directory: ./hl2sb-src-master/src
         run: |
-          xcodebuild -list -project games.xcodeproj
+          sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
+          sed -i '' 's|MACOSX_DEPLOYMENT_TARGET.*|IPHONEOS_DEPLOYMENT_TARGET = 13.0;|g' devtools/*.xcconfig || true
+          sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
+          sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
           xcodebuild -project games.xcodeproj \
             -alltargets \
             -configuration Release \
