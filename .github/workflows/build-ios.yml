@@ -114,6 +114,13 @@ jobs:
                   "bool CheckSSE2Technology(void) { return false; }\n"
                   "bool Check3DNowTechnology(void) { return false; }\n"
               )
+
+          # 7. Patch tier1/reliabletimer.cpp: replace x86 rdtsc (=A) with mach_absolute_time()
+          for rt in pathlib.Path(".").rglob("reliabletimer.cpp"):
+              rtxt = rt.read_text(errors="ignore")
+              rtxt = re.sub(r'__asm__\s+__volatile__\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', rtxt, flags=re.S)
+              rtxt = re.sub(r'asm\s+volatile\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', rtxt, flags=re.S)
+              rt.write_text("#include <mach/mach_time.h>\n" + rtxt)
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
