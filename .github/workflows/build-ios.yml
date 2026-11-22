@@ -99,15 +99,13 @@ jobs:
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
 
-          # 5. Patch tier1/strtools.cpp: fix ordered comparison between iconv_t and 0
+          # 5. Patch tier1/strtools.cpp: fix ordered comparison on lines 1466, 1506, 1552, 1597
           st = pathlib.Path("tier1/strtools.cpp")
           if st.exists():
               slines = st.read_text(errors="ignore").splitlines()
-              for idx, s in enumerate(slines):
-                  if "iconv_open" in "".join(slines[max(0, idx-5):idx+2]):
-                      s = re.sub(r'([A-Za-z_]\w*)\s*<=?\s*0\b', r'\1 == (iconv_t)-1', s)
-                      s = re.sub(r'\b0\s*>=?\s*([A-Za-z_]\w*)', r'\1 == (iconv_t)-1', s)
-                      slines[idx] = s
+              for line_no in (1466, 1506, 1552, 1597):
+                  if line_no - 1 < len(slines):
+                      slines[line_no - 1] = re.sub(r'<=?\s*\(?iconv_t\)?\s*0', '== (iconv_t)-1', slines[line_no - 1])
               st.write_text("\n".join(slines))
           EOF
 
