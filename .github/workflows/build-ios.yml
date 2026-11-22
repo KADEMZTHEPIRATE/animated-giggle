@@ -15,10 +15,10 @@ jobs:
       - name: Generate Xcode Project using Linux VPC
         working-directory: ./hl2sb-src-master/src
         run: |
-          ls -la devtools/bin
+          touch game/shared/gamestats.h
           chmod +x ./devtools/bin/* ./creategameprojects.sh
-          ./devtools/bin/vpc_linux /hl2mp +game /mksln games /osx || ./devtools/bin/vpc_linux /hl2mp +game /mksln games
-          ls -la
+          ./devtools/bin/vpc_linux /osx32 /hl2mp +game /mksln games || ./devtools/bin/vpc_linux /osx64 /hl2mp +game /mksln games
+          ls -la *.xcodeproj
 
       - name: Save Generated Project Files
         uses: actions/upload-artifact@v4
@@ -43,7 +43,6 @@ jobs:
       - name: Build client.dylib and server.dylib for iOS arm64
         working-directory: ./hl2sb-src-master/src
         run: |
-          ls -la *.xcodeproj *.mak || true
           xcodebuild -list -project games.xcodeproj
           xcodebuild -project games.xcodeproj \
             -alltargets \
