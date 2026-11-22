@@ -53,7 +53,7 @@ jobs:
           python3 - << 'EOF'
           import pathlib
 
-          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time()
+          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
           p = pathlib.Path("public/tier0/platform.h")
           lines = p.read_text(errors="ignore").splitlines()
           for idx, line in enumerate(lines):
@@ -61,7 +61,14 @@ jobs:
                   for k in range(max(0, idx-3), min(len(lines), idx+4)):
                       if any(w in lines[k] for w in ["asm", "=a", "=d", "rdtsc"]):
                           lines[k] = "// " + lines[k]
-          p.write_text("#include <mach/mach_time.h>\n#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + "\n".join(lines))
+          header_prefix = (
+              "#include <mach/mach_time.h>\n"
+              "#include <malloc/malloc.h>\n"
+              "#define malloc_usable_size malloc_size\n"
+              "#define PLATFORM_64BITS 1\n"
+              "#define VALVE_LITTLE_ENDIAN 1\n"
+          )
+          p.write_text(header_prefix + "\n".join(lines))
 
           # 2. Patch mathlib.h: replace x87 fsincos (=t) and fistpl ("t" (f))
           m = pathlib.Path("public/mathlib/mathlib.h")
@@ -86,7 +93,7 @@ jobs:
           ttxt = ttxt.replace("COMPILE_TIME_ASSERT( sizeof(T) == sizeof(long) );", "")
           t.write_text(ttxt)
 
-          # 4. Stub out x86-only inline asm in mathlib/sse.cpp (portable C++ fallbacks in mathlib_base.cpp handle these)
+          # 4. Stub out x86-only inline asm in mathlib/sse.cpp
           sse = pathlib.Path("mathlib/sse.cpp")
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
@@ -123,4 +130,3 @@ jobs:
             **/client.dylib
             **/server.dylib
             **/*.dylib
-
