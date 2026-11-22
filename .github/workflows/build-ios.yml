@@ -18,9 +18,22 @@ jobs:
       - name: Install ldid
         run: brew install ldid
 
-      - name: Generate Xcode Project via VPC
+      - name: Build Native 64-bit VPC & Generate Xcode Project
         working-directory: ./hl2sb-src-master/src
         run: |
+          echo "Inspecting utils/vpc..."
+          ls -la utils/vpc
+          if [ -f "utils/vpc/vpc/vpc.mak" ]; then
+            make -C utils/vpc/vpc -f vpc.mak
+          elif [ -f "utils/vpc/Makefile" ]; then
+            make -C utils/vpc
+          else
+            clang++ -O2 -std=c++11 -DOSX -DPOSIX -D_LINUX -DGNUC -DNDEBUG -DNO_MALLOC_OVERRIDE \
+              -Ipublic -Ipublic/tier0 -Ipublic/tier1 -Icommon -Iutils/vpc/vpc \
+              utils/vpc/vpc/*.cpp tier1/*.cpp \
+              -o devtools/bin/vpc_osx -liconv || true
+          fi
+          find utils/vpc -type f -perm +111 -exec cp {} devtools/bin/vpc_osx \; || true
           chmod +x ./devtools/bin/* ./creategameprojects.sh
           ./creategameprojects.sh
           ls -la *.xcodeproj || true
