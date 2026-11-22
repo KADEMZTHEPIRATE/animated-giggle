@@ -51,7 +51,7 @@ jobs:
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
 
           python3 - << 'EOF'
-          import pathlib, re
+          import pathlib
 
           # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
           p = pathlib.Path("public/tier0/platform.h")
@@ -115,12 +115,13 @@ jobs:
                   "bool Check3DNowTechnology(void) { return false; }\n"
               )
 
-          # 7. Patch tier1/reliabletimer.cpp: replace x86 rdtsc (=A) with mach_absolute_time()
+          # 7. Patch tier1/reliabletimer.cpp: replace "=A" rdtsc line with mach_absolute_time()
           for rt in pathlib.Path(".").rglob("reliabletimer.cpp"):
-              rtxt = rt.read_text(errors="ignore")
-              rtxt = re.sub(r'__asm__\s+__volatile__\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', rtxt, flags=re.S)
-              rtxt = re.sub(r'asm\s+volatile\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', rtxt, flags=re.S)
-              rt.write_text("#include <mach/mach_time.h>\n" + rtxt)
+              rlines = rt.read_text(errors="ignore").splitlines()
+              for idx, line in enumerate(rlines):
+                  if '"=A"' in line or "'=A'" in line:
+                      rlines[idx] = "return mach_absolute_time();"
+              rt.write_text("#include <mach/mach_time.h>\n" + "\n".join(rlines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
