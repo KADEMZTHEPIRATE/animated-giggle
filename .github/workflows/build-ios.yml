@@ -185,30 +185,3 @@ jobs:
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
           sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
           sed -i '' 's|CC = .*||g; s|CPLUSPLUS = .*||g' devtools/*.xcconfig || true
-      - name: Collect & Pseudo-Sign Dylibs for iOS
-        run: |
-          mkdir -p final_ios_dylibs
-          find . ~/Library/Developer/Xcode/DerivedData \( -name "*client*.dylib" -o -name "*client*.so" -o -name "*server*.dylib" -o -name "*server*.so" -o -name "*.dylib" \) 2>/dev/null || true
-          find . ~/Library/Developer/Xcode/DerivedData \( -name "*client*.dylib" -o -name "*client*.so" \) -exec cp {} final_ios_dylibs/client.dylib \; 2>/dev/null || true
-          find . ~/Library/Developer/Xcode/DerivedData \( -name "*server*.dylib" -o -name "*server*.so" \) -exec cp {} final_ios_dylibs/server.dylib \; 2>/dev/null || true
-          ls -lh final_ios_dylibs/
-          ldid -S final_ios_dylibs/*.dylib || true
-
-      - name: Upload iOS arm64 Dylibs
-        uses: actions/upload-artifact@v4
-        with:
-          name: hl2sbpp-ios-arm64-dylibs
-          path: final_ios_dylibs/*
-                 xcodebuild -project games.xcodeproj \
-         -alltargets \
-         -configuration Release \
-         -sdk iphoneos \
-         ARCHS="arm64" \
-         ONLY_ACTIVE_ARCH=NO \
-         IPHONEOS_DEPLOYMENT_TARGET="13.0" \
-         CODE_SIGNING_ALLOWED=NO \
-         OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
-         OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
-         OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
-         build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
-
