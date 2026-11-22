@@ -51,7 +51,7 @@ jobs:
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
 
           python3 - << 'EOF'
-          import pathlib, re
+          import pathlib
 
           # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time()
           p = pathlib.Path("public/tier0/platform.h")
@@ -63,12 +63,9 @@ jobs:
                           lines[k] = "// " + lines[k]
           p.write_text("#include <mach/mach_time.h>\n#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + "\n".join(lines))
 
-          # 2. Patch mathlib.h: replace x87 fsincos (=t) and line 1278 asm cleanly
+          # 2. Patch mathlib.h: replace x87 fsincos (=t) and fistpl ("t" (f))
           m = pathlib.Path("public/mathlib/mathlib.h")
           mlines = m.read_text(errors="ignore").splitlines()
-          print("--- mathlib.h 1270..1285 ---")
-          for i in range(1269, min(1285, len(mlines))):
-              print(f"{i+1}: {mlines[i]}")
           for idx, line in enumerate(mlines):
               if "Unknown architecture" in line:
                   mlines[idx] = "// " + line
@@ -77,24 +74,17 @@ jobs:
                       if any(w in mlines[k] for w in ["asm", "fsincos", "=t", "radians"]):
                           mlines[k] = "// " + mlines[k]
                   mlines[idx] = "*sine = sinf(radians); *cosine = cosf(radians);"
-          mtxt = "\n".join(mlines)
-          mtxt = re.sub(
-              r'(inline\s+float\s+FastSqrt\s*\(\s*float\s+(\w+)\s*\)\s*\{)[^}]*?"t"[^}]*?\}',
-              r'\1 return sqrtf(\2); }',
-              mtxt, flags=re.S
-          )
-          m.write_text("#include <cmath>\n" + mtxt)
+              elif '"fistpl %0;"' in line:
+                  mlines[idx-1] = "// " + mlines[idx-1]
+                  mlines[idx]   = "*((int64*)nResult) = (int64)lrintf(f);"
+                  mlines[idx+1] = "// " + mlines[idx+1]
+          m.write_text("#include <cmath>\n" + "\n".join(mlines))
 
-          # 3. Patch threadtools.h: inspect & fix CInterlockedIntT default constructor
+          # 3. Patch threadtools.h: remove sizeof(T) == sizeof(long) assert on 64-bit arm64
           t = pathlib.Path("public/tier0/threadtools.h")
-          tlines = t.read_text(errors="ignore").splitlines()
-          print("--- threadtools.h 415..432 ---")
-          for i in range(414, min(432, len(tlines))):
-              print(f"{i+1}: {tlines[i]}")
-          for idx in range(415, min(435, len(tlines))):
-              if "COMPILE_TIME_ASSERT" in tlines[idx]:
-                  tlines[idx] = "// " + tlines[idx]
-          t.write_text("\n".join(tlines))
+          ttxt = t.read_text(errors="ignore")
+          ttxt = ttxt.replace("COMPILE_TIME_ASSERT( sizeof(T) == sizeof(long) );", "")
+          t.write_text(ttxt)
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
@@ -115,7 +105,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
             OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=c++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
-            build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED|--- |^[0-9]+:" | head -n 60
+            build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
 
       - name: Pseudo-Sign Dylibs for iOS
         run: find . -name "*.dylib" -exec ldid -S {} + || true
