@@ -99,14 +99,14 @@ jobs:
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
 
-          # 5. Patch tier1/strtools.cpp: fix C++11 pointer comparison iconv_t <0 and -1
+          # 5. Patch tier1/strtools.cpp: fix C++11 pointer comparison conv < 0 and conv == -1
           st = pathlib.Path("tier1/strtools.cpp")
           if st.exists():
-              slines = st.read_text(errors="ignore").splitlines()
-              for idx in range(1450, min(1620, len(slines))):
-                  slines[idx] = re.sub(r'<\s*0\b', '== (iconv_t)-1', slines[idx])
-                  slines[idx] = re.sub(r'(?<![\w)])-\s*1\b', '(iconv_t)-1', slines[idx])
-              st.write_text("\n".join(slines))
+              stxt = st.read_text(errors="ignore")
+              stxt = re.sub(r'\bconv\s*<\s*0\b', 'conv == (iconv_t)-1', stxt)
+              stxt = re.sub(r'\bconv\s*==\s*-\s*1\b', 'conv == (iconv_t)-1', stxt)
+              stxt = re.sub(r'\bconv\s*!=\s*-\s*1\b', 'conv != (iconv_t)-1', stxt)
+              st.write_text(stxt)
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
