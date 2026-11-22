@@ -152,12 +152,11 @@ jobs:
                   klines[idx] = re.sub(r'\(\s*int\s*\)', '(intptr_t)', klines[idx])
               kv.write_text("#include <stdint.h>\n" + "\n".join(klines))
 
-          # 11. Patch public/tier1/datamanager.h: replace 32-bit unsigned / uint* pointer cast on line 254 with uintptr_t
+          # 11. Patch public/tier1/datamanager.h: replace 32-bit pointer cast on line 254 (index 253) only
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
-              for idx in range(max(0, 250), min(len(dlines), 258)):
-                  dlines[idx] = re.sub(r'\bunsigned(?:\s+int)?\b', 'uintptr_t', dlines[idx])
-                  dlines[idx] = re.sub(r'\buint\w*\b', 'uintptr_t', dlines[idx])
+              if len(dlines) > 253:
+                  dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
           EOF
 
