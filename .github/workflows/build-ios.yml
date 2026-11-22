@@ -199,3 +199,16 @@ jobs:
         with:
           name: hl2sbpp-ios-arm64-dylibs
           path: final_ios_dylibs/*
+                 xcodebuild -project games.xcodeproj \
+         -alltargets \
+         -configuration Release \
+         -sdk iphoneos \
+         ARCHS="arm64" \
+         ONLY_ACTIVE_ARCH=NO \
+         IPHONEOS_DEPLOYMENT_TARGET="13.0" \
+         CODE_SIGNING_ALLOWED=NO \
+         OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+         OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+         OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
+         build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
+
