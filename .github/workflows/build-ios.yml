@@ -87,10 +87,11 @@ jobs:
                   mlines[idx+1] = "// " + mlines[idx+1]
           m.write_text("#include <cmath>\n" + "\n".join(mlines))
 
-          # 3. Patch threadtools.h: remove sizeof(T) == sizeof(long) assert on 64-bit arm64
+          # 3. Patch threadtools.h: remove sizeof(T) == sizeof(long) assert and replace x86 "pause" with arm64 "yield"
           t = pathlib.Path("public/tier0/threadtools.h")
           ttxt = t.read_text(errors="ignore")
           ttxt = ttxt.replace("COMPILE_TIME_ASSERT( sizeof(T) == sizeof(long) );", "")
+          ttxt = ttxt.replace('"pause"', '"yield"')
           t.write_text(ttxt)
 
           # 4. Stub out x86-only inline asm in mathlib/sse.cpp
