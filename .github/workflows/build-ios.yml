@@ -156,8 +156,15 @@ jobs:
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
               if len(dlines) > 253:
-                  dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
+                  dlines = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines)
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
+
+          # 12. Patch tier1/checksum_crc.cpp: replace 32-bit pointer alignment cast on line 150 with uintptr_t
+          for cc in pathlib.Path(".").rglob("checksum_crc.cpp"):
+              clines = cc.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 146), min(len(clines), 154)):
+                  clines[idx] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', clines[idx])
+              cc.write_text("#include <stdint.h>\n" + "\n".join(clines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
@@ -181,14 +188,3 @@ jobs:
             OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
             build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
 
-      - name: Pseudo-Sign Dylibs for iOS
-        run: find . -name "*.dylib" -exec ldid -S {} + || true
-
-      - name: Upload iOS arm64 Dylibs
-        uses: actions/upload-artifact@v4
-        with:
-          name: hl2sbpp-ios-arm64-dylibs
-          path: |
-            **/client.dylib
-            **/server.dylib
-            **/*.dylib
