@@ -185,11 +185,10 @@ jobs:
             OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
             OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
             build > xcode.log 2>&1 || true
-                echo "=== XCODE ERRORS ==="
-       grep -C 2 "error:" xcode.log | head -n 40 || tail -n 20 xcode.log
-          echo "=== BUILT BINARIES ==="
-          find .. ~/Library/Developer/Xcode/DerivedData -type f \( -name "*client*" -o -name "*server*" -o -name "*.dylib" -o -name "*.so" \) -not -name "*.cpp" -not -name "*.h" -not -name "*.o" -not -name "*.vpc" -not -name "*.vcproj" -not -name "*.xcodeproj" 2>/dev/null || true
+          echo "=== XCODE ERRORS ==="
+          grep -C 2 "error:" xcode.log | head -n 40 || tail -n 20 xcode.log
 
       - name: Collect & Pseudo-Sign Dylibs for iOS
         run: |
           mkdir -p final_ios_dylibs
+          find . ~/Library/Developer/Xcode/DerivedData -type f \( -name "client.dylib" -o -name "client.so" -o -name "client" \) -exec cp {} final_ios_dylibs/client.dylib \; 2>/dev/null || true
