@@ -53,7 +53,7 @@ jobs:
           python3 - << 'EOF'
           import pathlib, re
 
-          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
+          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time(), map malloc_usable_size, and make HMODULE void*
           p = pathlib.Path("public/tier0/platform.h")
           lines = p.read_text(errors="ignore").splitlines()
           for idx, line in enumerate(lines):
@@ -61,6 +61,8 @@ jobs:
                   for k in range(max(0, idx-3), min(len(lines), idx+4)):
                       if any(w in lines[k] for w in ["asm", "=a", "=d", "rdtsc"]):
                           lines[k] = "// " + lines[k]
+          ptxt = "\n".join(lines)
+          ptxt = re.sub(r'typedef\s+\w+(?:\s+\w+)?\s+HMODULE\s*;', 'typedef void* HMODULE;', ptxt)
           header_prefix = (
               "#include <mach/mach_time.h>\n"
               "#include <malloc/malloc.h>\n"
@@ -68,7 +70,7 @@ jobs:
               "#define PLATFORM_64BITS 1\n"
               "#define VALVE_LITTLE_ENDIAN 1\n"
           )
-          p.write_text(header_prefix + "\n".join(lines))
+          p.write_text(header_prefix + ptxt)
 
           # 2. Patch mathlib.h: replace x87 fsincos (=t) and fistpl ("t" (f))
           m = pathlib.Path("public/mathlib/mathlib.h")
