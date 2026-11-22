@@ -42,10 +42,12 @@ jobs:
       - name: Fix Paths & Build client.dylib and server.dylib for iOS arm64
         working-directory: ./hl2sb-src-master/src
         run: |
+          chmod -R +x devtools/bin
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
           sed -i '' 's|MACOSX_DEPLOYMENT_TARGET.*|IPHONEOS_DEPLOYMENT_TARGET = 13.0;|g' devtools/*.xcconfig || true
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
           sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
+          sed -i '' 's|CC = .*||g; s|CPLUSPLUS = .*||g' devtools/*.xcconfig || true
           sed -i '' 's|-msse[0-9.]*||g; s|-mfpmath=sse||g; s|-arch i386||g; s|-arch x86_64||g; s|-m32||g' devtools/*.xcconfig games.xcodeproj/project.pbxproj || true
           set -o pipefail
           xcodebuild -project games.xcodeproj \
