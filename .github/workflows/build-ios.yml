@@ -132,6 +132,14 @@ jobs:
               itxt = ih.read_text(errors="ignore")
               itxt = re.sub(r'typedef\s+(?:unsigned\s+)?int\s+HMODULE\s*;', 'typedef void* HMODULE;', itxt)
               ih.write_text(itxt)
+
+          # 9. Patch public/tier1/mempool.h: replace 32-bit (unsigned int) pointer cast with 64-bit (uintptr_t)
+          mp = pathlib.Path("public/tier1/mempool.h")
+          if mp.exists():
+              mplines = mp.read_text(errors="ignore").splitlines()
+              if len(mplines) >= 461:
+                  mplines[460] = mplines[460].replace("(unsigned int)", "(uintptr_t)")
+              mp.write_text("#include <stdint.h>\n" + "\n".join(mplines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
