@@ -53,7 +53,6 @@ jobs:
           python3 - << 'EOF'
           import pathlib, re
 
-          # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
           p = pathlib.Path("public/tier0/platform.h")
           lines = p.read_text(errors="ignore").splitlines()
           for idx, line in enumerate(lines):
@@ -72,7 +71,6 @@ jobs:
           )
           p.write_text(header_prefix + ptxt)
 
-          # 2. Patch mathlib.h: replace x87 fsincos (=t) and fistpl ("t" (f))
           m = pathlib.Path("public/mathlib/mathlib.h")
           mlines = m.read_text(errors="ignore").splitlines()
           for idx, line in enumerate(mlines):
@@ -89,26 +87,22 @@ jobs:
                   mlines[idx+1] = "// " + mlines[idx+1]
           m.write_text("#include <cmath>\n" + "\n".join(mlines))
 
-          # 3. Patch threadtools.h: remove sizeof(T) == sizeof(long) assert and replace x86 "pause" with arm64 "yield"
           t = pathlib.Path("public/tier0/threadtools.h")
           ttxt = t.read_text(errors="ignore")
           ttxt = ttxt.replace("COMPILE_TIME_ASSERT( sizeof(T) == sizeof(long) );", "")
           ttxt = ttxt.replace('"pause"', '"yield"')
           t.write_text(ttxt)
 
-          # 4. Stub out x86-only inline asm in mathlib/sse.cpp
           sse = pathlib.Path("mathlib/sse.cpp")
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
 
-          # 5. Patch strtools.cpp: fix conv_t > 0 -> conv_t != (iconv_t)-1
           for st in pathlib.Path(".").rglob("strtools.cpp"):
               stxt = st.read_text(errors="ignore")
               stxt = stxt.replace("conv_t > 0", "conv_t != (iconv_t)-1")
               stxt = stxt.replace("conv_t < 0", "conv_t == (iconv_t)-1")
               st.write_text(stxt)
 
-          # 6. Stub out x86 cpuid assembly in tier1/processor_detect_linux.cpp
           for pd in pathlib.Path(".").rglob("processor_detect_linux.cpp"):
               pd.write_text(
                   "bool CheckMMXTechnology(void) { return false; }\n"
@@ -117,7 +111,6 @@ jobs:
                   "bool Check3DNowTechnology(void) { return false; }\n"
               )
 
-          # 7. Patch tier1/reliabletimer.cpp: comment out multi-line rdtsc asm block (lines 89-93)
           for rt in pathlib.Path(".").rglob("reliabletimer.cpp"):
               rlines = rt.read_text(errors="ignore").splitlines()
               for idx, line in enumerate(rlines):
@@ -128,7 +121,6 @@ jobs:
                       rlines[idx] = "return mach_absolute_time();"
               rt.write_text("#include <mach/mach_time.h>\n" + "\n".join(rlines))
 
-          # 8. Patch HMODULE in interface.h and interface.cpp to be 64-bit pointer (void*)
           for fpath in ("public/tier1/interface.h", "tier1/interface.cpp"):
               ih = pathlib.Path(fpath)
               if ih.exists():
@@ -137,7 +129,6 @@ jobs:
                   itxt = re.sub(r'#define\s+HMODULE\s+.*', 'typedef void* HMODULE;', itxt)
                   ih.write_text(itxt)
 
-          # 9. Patch all mempool.h copies: replace unsigned / uint* pointer casts around line 461 with uintptr_t
           for mp in pathlib.Path(".").rglob("mempool.h"):
               mplines = mp.read_text(errors="ignore").splitlines()
               for idx in range(max(0, 455), min(len(mplines), 466)):
@@ -145,34 +136,29 @@ jobs:
                   mplines[idx] = re.sub(r'\buint\w*\b', 'uintptr_t', mplines[idx])
               mp.write_text("#include <stdint.h>\n" + "\n".join(mplines))
 
-          # 10. Patch tier1/kvpacker.cpp: replace 32-bit (int) pointer cast on line 148 with (intptr_t)
           for kv in pathlib.Path(".").rglob("kvpacker.cpp"):
               klines = kv.read_text(errors="ignore").splitlines()
               for idx in range(max(0, 144), min(len(klines), 152)):
                   klines[idx] = re.sub(r'\(\s*int\s*\)', '(intptr_t)', klines[idx])
               kv.write_text("#include <stdint.h>\n" + "\n".join(klines))
 
-          # 11. Patch public/tier1/datamanager.h: replace 32-bit pointer cast on line 254 (index 253) only
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
               if len(dlines) > 253:
                   dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
 
-          # 12. Patch tier1/checksum_crc.cpp: replace 32-bit pointer alignment cast on line 150 with uintptr_t
           for cc in pathlib.Path(".").rglob("checksum_crc.cpp"):
               clines = cc.read_text(errors="ignore").splitlines()
               for idx in range(max(0, 146), min(len(clines), 154)):
                   clines[idx] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', clines[idx])
               cc.write_text("#include <stdint.h>\n" + "\n".join(clines))
 
-          # 13. Patch public/tier1/utlhash.h: make UtlHashFixedHandle_t 64-bit intptr_t
           for uh in pathlib.Path(".").rglob("utlhash.h"):
               utxt = uh.read_text(errors="ignore")
               utxt = re.sub(r'typedef\s+\w+\s+UtlHashFixedHandle_t\s*;', 'typedef intptr_t UtlHashFixedHandle_t;', utxt)
               uh.write_text("#include <stdint.h>\n" + utxt)
 
-          # 14. Patch tier1/KeyValues.cpp: replace 32-bit int pointer cast around line 2528 with intptr_t
           for kvc in pathlib.Path(".").rglob("KeyValues.cpp"):
               kvlines = kvc.read_text(errors="ignore").splitlines()
               for idx in range(max(0, 2520), min(len(kvlines), 2536)):
@@ -185,3 +171,25 @@ jobs:
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
           sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
           sed -i '' 's|CC = .*||g; s|CPLUSPLUS = .*||g' devtools/*.xcconfig || true
+          sed -i '' 's|-msse[0-9.]*||g; s|-mfpmath=sse||g; s|-arch i386||g; s|-arch x86_64||g; s|-m32||g' devtools/*.xcconfig games.xcodeproj/project.pbxproj || true
+          SHIM_PATH="$(pwd)/arm64_shims"
+          xcodebuild -project games.xcodeproj \
+            -alltargets \
+            -configuration Release \
+            -sdk iphoneos \
+            ARCHS="arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            IPHONEOS_DEPLOYMENT_TARGET="13.0" \
+            CODE_SIGNING_ALLOWED=NO \
+            OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
+            build > xcode.log 2>&1 || true
+          echo "=== XCODE SUMMARY ==="
+          tail -n 30 xcode.log
+          echo "=== BUILT BINARIES ==="
+          find .. ~/Library/Developer/Xcode/DerivedData -type f \( -name "*client*" -o -name "*server*" -o -name "*.dylib" -o -name "*.so" \) -not -name "*.cpp" -not -name "*.h" -not -name "*.o" -not -name "*.vpc" -not -name "*.vcproj" -not -name "*.xcodeproj" 2>/dev/null || true
+
+      - name: Collect & Pseudo-Sign Dylibs for iOS
+        run: |
+          mkdir -p final_ios_dylibs
