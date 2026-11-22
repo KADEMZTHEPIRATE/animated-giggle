@@ -51,40 +51,42 @@ jobs:
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
 
           python3 - << 'EOF'
-          import pathlib, re
+          import pathlib
 
           # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time()
           p = pathlib.Path("public/tier0/platform.h")
-          txt = p.read_text(errors="ignore")
-          txt = re.sub(r'__asm__\s+__volatile__\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', txt, flags=re.S)
-          txt = re.sub(r'asm\s+volatile\s*\(\s*"rdtsc"[^;]*?;', 'return mach_absolute_time();', txt, flags=re.S)
-          lines = txt.splitlines()
+          lines = p.read_text(errors="ignore").splitlines()
           for idx, line in enumerate(lines):
               if '"=a"' in line or "'=a'" in line:
                   for k in range(max(0, idx-3), min(len(lines), idx+4)):
-                      if "asm" in lines[k] or "=a" in lines[k] or "=d" in lines[k] or "rdtsc" in lines[k]:
+                      if any(w in lines[k] for w in ["asm", "=a", "=d", "rdtsc"]):
                           lines[k] = "// " + lines[k]
-          txt = "#include <mach/mach_time.h>\n#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + "\n".join(lines)
-          p.write_text(txt)
+          p.write_text("#include <mach/mach_time.h>\n#define PLATFORM_64BITS 1\n#define VALVE_LITTLE_ENDIAN 1\n" + "\n".join(lines))
 
-          # 2. Patch mathlib.h: replace x87 asm blocks cleanly with standard C++ math
+          # 2. Patch mathlib.h: replace x87 fsincos (=t) and fistp (t) cleanly with sinf/cosf/lrintf
           m = pathlib.Path("public/mathlib/mathlib.h")
-          mtxt = m.read_text(errors="ignore")
-          mtxt = mtxt.replace('#error "Unknown architecture"', '// #error "Unknown architecture"')
-          mtxt = mtxt.replace('#error Unknown architecture', '// #error Unknown architecture')
-          mtxt = re.sub(r'__asm__\s+__volatile__\s*\([^;]*?("=t"|"t")[^;]*?;', '', mtxt, flags=re.S)
-          mtxt = re.sub(r'asm\s+volatile\s*\([^;]*?("=t"|"t")[^;]*?;', '', mtxt, flags=re.S)
-          mtxt = re.sub(r'__asm__\s*\([^;]*?("=t"|"t")[^;]*?;', '', mtxt, flags=re.S)
-          mtxt = re.sub(r'asm\s*\([^;]*?("=t"|"t")[^;]*?;', '', mtxt, flags=re.S)
-          m.write_text("#include <cmath>\n" + mtxt)
+          mlines = m.read_text(errors="ignore").splitlines()
+          for idx, line in enumerate(mlines):
+              if "Unknown architecture" in line:
+                  mlines[idx] = "// " + line
+              elif '"=t"' in line:
+                  for k in range(max(0, idx-3), min(len(mlines), idx+3)):
+                      if any(w in mlines[k] for w in ["asm", "fsincos", "=t", "radians"]):
+                          mlines[k] = "// " + mlines[k]
+                  mlines[idx] = "*sine = sinf(radians); *cosine = cosf(radians);"
+              elif '"t"' in line and "asm" in "".join(mlines[max(0, idx-3):idx+1]):
+                  for k in range(max(0, idx-3), min(len(mlines), idx+3)):
+                      if any(w in mlines[k] for w in ["asm", "fistp", "frndint", '"t"', "val"]):
+                          mlines[k] = "// " + mlines[k]
+                  mlines[idx] = "res = (int)lrintf(val);"
+          m.write_text("#include <cmath>\n" + "\n".join(mlines))
 
-          # 3. Patch threadtools.h: add default constructor to CInterlockedIntT and skip 32-bit ThreadId_t assert
+          # 3. Patch threadtools.h: comment out 32-bit ThreadId_t COMPILE_TIME_ASSERT
           t = pathlib.Path("public/tier0/threadtools.h")
-          ttxt = t.read_text(errors="ignore")
-          ttxt = ttxt.replace("CInterlockedIntT( T value )", "CInterlockedIntT() : m_value( 0 ) {}\n\tCInterlockedIntT( T value )")
-          tlines = ttxt.splitlines()
-          if len(tlines) >= 422 and "COMPILE_TIME_ASSERT" in tlines:
-              tlines = "// " + tlines
+          tlines = t.read_text(errors="ignore").splitlines()
+          for idx, line in enumerate(tlines):
+              if "COMPILE_TIME_ASSERT" in line and "ThreadId_t" in line:
+                  tlines[idx] = "// " + line
           t.write_text("\n".join(tlines))
           EOF
 
