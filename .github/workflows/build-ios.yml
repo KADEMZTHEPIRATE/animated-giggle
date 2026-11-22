@@ -99,13 +99,18 @@ jobs:
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
 
-          # 5. Patch tier1/strtools.cpp: replace < 0 / <0 directly on lines 1466, 1506, 1552, 1597
+          # 5. Patch tier1/strtools.cpp: fix <= 0 / < 0 / 0 > on lines 1466, 1506, 1552, 1597
           st = pathlib.Path("tier1/strtools.cpp")
           if st.exists():
               slines = st.read_text(errors="ignore").splitlines()
               for line_no in (1466, 1506, 1552, 1597):
                   if line_no - 1 < len(slines):
-                      slines[line_no - 1] = slines[line_no - 1].replace("< 0", "== (iconv_t)-1").replace("<0", "== (iconv_t)-1")
+                      s = slines[line_no - 1]
+                      for pat in ("<= 0", "<=0", "< 0", "<0"):
+                          s = s.replace(pat, "== (iconv_t)-1")
+                      for pat in ("0 >=", "0>=", "0 >", "0>"):
+                          s = s.replace(pat, "(iconv_t)-1 ==")
+                      slines[line_no - 1] = s
               st.write_text("\n".join(slines))
           EOF
 
