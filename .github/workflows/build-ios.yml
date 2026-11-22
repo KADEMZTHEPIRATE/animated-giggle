@@ -133,11 +133,12 @@ jobs:
               itxt = re.sub(r'typedef\s+(?:unsigned\s+)?int\s+HMODULE\s*;', 'typedef void* HMODULE;', itxt)
               ih.write_text(itxt)
 
-          # 9. Patch public/tier1/mempool.h: replace any 32-bit uint* pointer cast on line 461 with (uintptr_t)
+          # 9. Patch public/tier1/mempool.h: replace <unsigned int> / (unsigned int) / unsigned int( pointer casts with uintptr_t
           mp = pathlib.Path("public/tier1/mempool.h")
           if mp.exists():
               mplines = mp.read_text(errors="ignore").splitlines()
               for idx in range(max(0, 455), min(len(mplines), 466)):
+                  mplines[idx] = re.sub(r'<\s*(?:unsigned\s+int|uint\w*)\s*>', '<uintptr_t>', mplines[idx])
                   mplines[idx] = re.sub(r'\(\s*(?:unsigned\s+int|uint\w*)\s*\)', '(uintptr_t)', mplines[idx])
                   mplines[idx] = re.sub(r'\b(?:unsigned\s+int|uint\w*)\s*\(', 'uintptr_t(', mplines[idx])
               mp.write_text("#include <stdint.h>\n" + "\n".join(mplines))
