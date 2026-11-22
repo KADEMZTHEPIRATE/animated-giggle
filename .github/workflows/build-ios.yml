@@ -99,14 +99,15 @@ jobs:
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
 
-          # 5. Patch tier1/strtools.cpp: fix ordered comparison on lines 1466, 1506, 1552, 1597
-          st = pathlib.Path("tier1/strtools.cpp")
-          if st.exists():
+          # 5. Patch all strtools.cpp copies: fix ordered comparison on lines 1466, 1506, 1552, 1597
+          for st in pathlib.Path(".").rglob("strtools.cpp"):
               slines = st.read_text(errors="ignore").splitlines()
-              for line_no in (1466, 1506, 1552, 1597):
-                  if line_no - 1 < len(slines):
-                      slines[line_no - 1] = re.sub(r'<=?\s*\(?iconv_t\)?\s*0', '== (iconv_t)-1', slines[line_no - 1])
-              st.write_text("\n".join(slines))
+              if len(slines) >= 1600:
+                  print("Line 1466 before:", repr(slines[1465]))
+                  for line_no in (1466, 1506, 1552, 1597):
+                      slines[line_no - 1] = re.sub(r'\(\s*([A-Za-z_]\w*)\s*[<>=!]+\s*[^)]+\)', r'( \1 == (iconv_t)-1 )', slines[line_no - 1])
+                  print("Line 1466 after:", repr(slines[1465]))
+                  st.write_text("\n".join(slines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
@@ -128,7 +129,7 @@ jobs:
             OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
             OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=c++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
             OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
-            build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
+            build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED|Line 1466" | head -n 40
 
       - name: Pseudo-Sign Dylibs for iOS
         run: find . -name "*.dylib" -exec ldid -S {} + || true
@@ -141,3 +142,4 @@ jobs:
             **/client.dylib
             **/server.dylib
             **/*.dylib
+
