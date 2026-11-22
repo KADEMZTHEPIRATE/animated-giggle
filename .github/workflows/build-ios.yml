@@ -115,11 +115,14 @@ jobs:
                   "bool Check3DNowTechnology(void) { return false; }\n"
               )
 
-          # 7. Patch tier1/reliabletimer.cpp: replace "=A" rdtsc line with mach_absolute_time()
+          # 7. Patch tier1/reliabletimer.cpp: comment out multi-line rdtsc asm block (lines 89-93)
           for rt in pathlib.Path(".").rglob("reliabletimer.cpp"):
               rlines = rt.read_text(errors="ignore").splitlines()
               for idx, line in enumerate(rlines):
                   if '"=A"' in line or "'=A'" in line:
+                      for k in range(max(0, idx-2), min(len(rlines), idx+3)):
+                          if any(w in rlines[k] for w in ["asm", "rdtsc", "=A", ");"]):
+                              rlines[k] = "// " + rlines[k]
                       rlines[idx] = "return mach_absolute_time();"
               rt.write_text("#include <mach/mach_time.h>\n" + "\n".join(rlines))
           EOF
