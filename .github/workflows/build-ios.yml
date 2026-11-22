@@ -165,6 +165,19 @@ jobs:
               for idx in range(max(0, 146), min(len(clines), 154)):
                   clines[idx] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', clines[idx])
               cc.write_text("#include <stdint.h>\n" + "\n".join(clines))
+
+          # 13. Patch public/tier1/utlhash.h: make UtlHashFixedHandle_t 64-bit intptr_t
+          for uh in pathlib.Path(".").rglob("utlhash.h"):
+              utxt = uh.read_text(errors="ignore")
+              utxt = re.sub(r'typedef\s+\w+\s+UtlHashFixedHandle_t\s*;', 'typedef intptr_t UtlHashFixedHandle_t;', utxt)
+              uh.write_text("#include <stdint.h>\n" + utxt)
+
+          # 14. Patch tier1/KeyValues.cpp: replace 32-bit int pointer cast around line 2528 with intptr_t
+          for kvc in pathlib.Path(".").rglob("KeyValues.cpp"):
+              kvlines = kvc.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 2520), min(len(kvlines), 2536)):
+                  kvlines[idx] = re.sub(r'\b(?:unsigned\s+)?int\b|\buint\w*\b', 'intptr_t', kvlines[idx])
+              kvc.write_text("#include <stdint.h>\n" + "\n".join(kvlines))
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
@@ -172,19 +185,3 @@ jobs:
           sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
           sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
           sed -i '' 's|CC = .*||g; s|CPLUSPLUS = .*||g' devtools/*.xcconfig || true
-          sed -i '' 's|-msse[0-9.]*||g; s|-mfpmath=sse||g; s|-arch i386||g; s|-arch x86_64||g; s|-m32||g' devtools/*.xcconfig games.xcodeproj/project.pbxproj || true
-          SHIM_PATH="$(pwd)/arm64_shims"
-          set -o pipefail
-          xcodebuild -project games.xcodeproj \
-            -alltargets \
-            -configuration Release \
-            -sdk iphoneos \
-            ARCHS="arm64" \
-            ONLY_ACTIVE_ARCH=NO \
-            IPHONEOS_DEPLOYMENT_TARGET="13.0" \
-            CODE_SIGNING_ALLOWED=NO \
-            OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
-            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
-            OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
-            build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
-
