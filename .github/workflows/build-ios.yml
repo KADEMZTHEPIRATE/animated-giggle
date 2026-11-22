@@ -51,7 +51,7 @@ jobs:
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
 
           python3 - << 'EOF'
-          import pathlib
+          import pathlib, re
 
           # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
           p = pathlib.Path("public/tier0/platform.h")
@@ -99,13 +99,13 @@ jobs:
           if sse.exists():
               sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
 
-          # 5. Patch tier1/strtools.cpp: fix C++11 pointer comparison iconv_t < 0 -> == (iconv_t)-1
+          # 5. Patch tier1/strtools.cpp: fix C++11 pointer comparison iconv_t <0 and -1
           st = pathlib.Path("tier1/strtools.cpp")
           if st.exists():
               slines = st.read_text(errors="ignore").splitlines()
               for idx in range(1450, min(1620, len(slines))):
-                  if "< 0" in slines[idx]:
-                      slines[idx] = slines[idx].replace("< 0", "== (iconv_t)-1")
+                  slines[idx] = re.sub(r'<\s*0\b', '== (iconv_t)-1', slines[idx])
+                  slines[idx] = re.sub(r'(?<![\w)])-\s*1\b', '(iconv_t)-1', slines[idx])
               st.write_text("\n".join(slines))
           EOF
 
