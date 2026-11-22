@@ -21,6 +21,7 @@ jobs:
 
       - name: Build client.dylib and server.dylib for iOS arm64
         run: |
+          cd hl2sb-src-master
           if [ -f "CMakeLists.txt" ]; then
             cmake -B build-ios -G Ninja \
               -DCMAKE_SYSTEM_NAME=iOS \
@@ -42,8 +43,12 @@ jobs:
             cd src
             python3 ./waf configure --ios --arch=arm64 -T release
             python3 ./waf build --targets=client,server
+          elif [ -d "src" ]; then
+            echo "Found VPC source tree. Listing files inside hl2sb-src-master/src:"
+            ls -la src
+            exit 1
           else
-            echo "Build file not found. Listing root files:"
+            echo "Listing files inside hl2sb-src-master:"
             ls -la
             exit 1
           fi
