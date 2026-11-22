@@ -126,12 +126,13 @@ jobs:
                       rlines[idx] = "return mach_absolute_time();"
               rt.write_text("#include <mach/mach_time.h>\n" + "\n".join(rlines))
 
-          # 8. Patch HMODULE in both interface.h and tier1/interface.cpp to be 64-bit pointer (void*)
+          # 8. Patch HMODULE in interface.h and interface.cpp to be 64-bit pointer (void*)
           for fpath in ("public/tier1/interface.h", "tier1/interface.cpp"):
               ih = pathlib.Path(fpath)
               if ih.exists():
                   itxt = ih.read_text(errors="ignore")
-                  itxt = re.sub(r'typedef\s+(?:unsigned\s+)?int\s+HMODULE\s*;', 'typedef void* HMODULE;', itxt)
+                  itxt = re.sub(r'typedef\s+\w+(?:\s+\w+)?\s+HMODULE\s*;', 'typedef void* HMODULE;', itxt)
+                  itxt = re.sub(r'#define\s+HMODULE\s+.*', 'typedef void* HMODULE;', itxt)
                   ih.write_text(itxt)
 
           # 9. Patch all mempool.h copies: replace unsigned / uint* pointer casts around line 461 with uintptr_t
