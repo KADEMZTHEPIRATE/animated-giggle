@@ -136,10 +136,9 @@ jobs:
           # 9. Patch public/tier1/mempool.h: replace 32-bit (unsigned int) pointer cast with 64-bit (uintptr_t)
           mp = pathlib.Path("public/tier1/mempool.h")
           if mp.exists():
-              mplines = mp.read_text(errors="ignore").splitlines()
-              if len(mplines) >= 461:
-                  mplines[460] = mplines[460].replace("(unsigned int)", "(uintptr_t)")
-              mp.write_text("#include <stdint.h>\n" + "\n".join(mplines))
+              mptxt = mp.read_text(errors="ignore")
+              mptxt = mptxt.replace("(unsigned int)", "(uintptr_t)")
+              mp.write_text("#include <stdint.h>\n" + mptxt)
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
