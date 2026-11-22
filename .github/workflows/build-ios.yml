@@ -62,6 +62,7 @@ jobs:
                           lines[k] = "// " + lines[k]
           ptxt = "\n".join(lines)
           ptxt = re.sub(r'typedef\s+\w+(?:\s+\w+)?\s+HMODULE\s*;', 'typedef void* HMODULE;', ptxt)
+          ptxt = ptxt.replace('"int $3"', '"brk #0"').replace('"int 3"', '"brk #0"')
           header_prefix = (
               "#include <mach/mach_time.h>\n"
               "#include <malloc/malloc.h>\n"
@@ -70,6 +71,12 @@ jobs:
               "#define VALVE_LITTLE_ENDIAN 1\n"
           )
           p.write_text(header_prefix + ptxt)
+
+          dbg = pathlib.Path("public/tier0/dbg.h")
+          if dbg.exists():
+              dtxt = dbg.read_text(errors="ignore")
+              dtxt = dtxt.replace('"int $3"', '"brk #0"').replace('"int 3"', '"brk #0"')
+              dbg.write_text(dtxt)
 
           m = pathlib.Path("public/mathlib/mathlib.h")
           mlines = m.read_text(errors="ignore").splitlines()
@@ -191,4 +198,3 @@ jobs:
       - name: Collect & Pseudo-Sign Dylibs for iOS
         run: |
           mkdir -p final_ios_dylibs
-          find . ~/Library/Developer/Xcode/DerivedData -type f \( -name "client.dylib" -o -name "client.so" -o -name "client" \) -exec cp {} final_ios_dylibs/client.dylib \; 2>/dev/null || true
