@@ -85,6 +85,11 @@ jobs:
           ttxt = t.read_text(errors="ignore")
           ttxt = ttxt.replace("COMPILE_TIME_ASSERT( sizeof(T) == sizeof(long) );", "")
           t.write_text(ttxt)
+
+          # 4. Stub out x86-only inline asm in mathlib/sse.cpp (portable C++ fallbacks in mathlib_base.cpp handle these)
+          sse = pathlib.Path("mathlib/sse.cpp")
+          if sse.exists():
+              sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
@@ -118,3 +123,4 @@ jobs:
             **/client.dylib
             **/server.dylib
             **/*.dylib
+
