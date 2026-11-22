@@ -51,7 +51,7 @@ jobs:
           printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
 
           python3 - << 'EOF'
-          import pathlib
+          import pathlib, re
 
           # 1. Patch platform.h: replace x86 rdtsc (=a) with mach_absolute_time() and map malloc_usable_size -> malloc_size
           p = pathlib.Path("public/tier0/platform.h")
@@ -125,6 +125,13 @@ jobs:
                               rlines[k] = "// " + rlines[k]
                       rlines[idx] = "return mach_absolute_time();"
               rt.write_text("#include <mach/mach_time.h>\n" + "\n".join(rlines))
+
+          # 8. Patch public/tier1/interface.h: make HMODULE 64-bit pointer (void*) instead of 32-bit unsigned int
+          ih = pathlib.Path("public/tier1/interface.h")
+          if ih.exists():
+              itxt = ih.read_text(errors="ignore")
+              itxt = re.sub(r'typedef\s+(?:unsigned\s+)?int\s+HMODULE\s*;', 'typedef void* HMODULE;', itxt)
+              ih.write_text(itxt)
           EOF
 
           sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
@@ -144,7 +151,7 @@ jobs:
             IPHONEOS_DEPLOYMENT_TARGET="13.0" \
             CODE_SIGNING_ALLOWED=NO \
             OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
-            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=c++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
             OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
             build 2>&1 | grep -E "error:|fatal error:|BUILD SUCCEEDED|BUILD FAILED" | head -n 40
 
