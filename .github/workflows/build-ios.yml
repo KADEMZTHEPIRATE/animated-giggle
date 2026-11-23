@@ -172,7 +172,6 @@ jobs:
                   kvlines[idx] = re.sub(r'\b(?:unsigned\s+)?int\b|\buint\w*\b', 'intptr_t', kvlines[idx])
               kvc.write_text("#include <stdint.h>\n" + "\n".join(kvlines))
 
-          # 15. Patch public/vgui/VGUI.h: make VPANEL 64-bit uintptr_t so pointer casts in vgui_controls succeed
           for vh in pathlib.Path(".").rglob("VGUI.h"):
               vtxt = vh.read_text(errors="ignore")
               vtxt = re.sub(r'typedef\s+unsigned\s+int\s+VPANEL\s*;', 'typedef uintptr_t VPANEL;', vtxt)
@@ -195,3 +194,5 @@ jobs:
             IPHONEOS_DEPLOYMENT_TARGET="13.0" \
             CODE_SIGNING_ALLOWED=NO \
             OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
