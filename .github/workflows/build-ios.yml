@@ -152,7 +152,7 @@ jobs:
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dlines = dm.read_text(errors="ignore").splitlines()
               if len(dlines) > 253:
-                  dlines[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines[253])
+                  dlines = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines)
               dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
 
           for cc in pathlib.Path(".").rglob("checksum_crc.cpp"):
