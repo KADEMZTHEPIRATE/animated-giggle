@@ -1,0 +1,214 @@
+name: Build HL2SBPP iOS arm64 Dylibs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  generate-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Generate Xcode Project using Linux VPC
+        working-directory: ./hl2sb-src-master/src
+        run: |
+          touch game/shared/gamestats.h
+          chmod +x ./devtools/bin/* ./creategameprojects.sh
+          ./devtools/bin/vpc_linux /osx32 /hl2mp +game /mksln games || ./devtools/bin/vpc_linux /osx64 /hl2mp +game /mksln games
+
+      - name: Save Generated Project Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-xcodeproj
+          path: hl2sb-src-master/src
+
+  build-ios:
+    needs: generate-project
+    runs-on: macos-latest
+
+    steps:
+      - name: Download Source with Generated Project
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-xcodeproj
+          path: hl2sb-src-master/src
+
+      - name: Install ldid & simde
+        run: brew install ldid simde
+
+      - name: Patch ARM64 Headers & Build Dylibs
+        working-directory: ./hl2sb-src-master/src
+        run: |
+          chmod -R +x devtools/bin
+          mkdir -p arm64_shims
+          SIMDE_INC="$(brew --prefix simde)/include"
+          printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/mmx.h"\n' "$SIMDE_INC" > arm64_shims/mmintrin.h
+          printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse.h"\n' "$SIMDE_INC" > arm64_shims/xmmintrin.h
+          printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse2.h"\n' "$SIMDE_INC" > arm64_shims/emmintrin.h
+          printf '#define SIMDE_ENABLE_NATIVE_ALIASES\n#include "%s/simde/x86/sse3.h"\n' "$SIMDE_INC" > arm64_shims/pmmintrin.h
+
+          python3 - << 'EOF'
+          import pathlib, re
+
+          p = pathlib.Path("public/tier0/platform.h")
+          lines = p.read_text(errors="ignore").splitlines()
+          for idx, line in enumerate(lines):
+              if '"=a"' in line or "'=a'" in line:
+                  for k in range(max(0, idx-3), min(len(lines), idx+4)):
+                      if any(w in lines[k] for w in ["asm", "=a", "=d", "rdtsc"]):
+                          lines[k] = "// " + lines[k]
+          ptxt = "\n".join(lines)
+          ptxt = re.sub(r'typedef\s+\w+(?:\s+\w+)?\s+HMODULE\s*;', 'typedef void* HMODULE;', ptxt)
+          ptxt = ptxt.replace('"int $3"', '"brk #0"').replace('"int 3"', '"brk #0"')
+          header_prefix = (
+              "#include <mach/mach_time.h>\n"
+              "#include <malloc/malloc.h>\n"
+              "#define malloc_usable_size malloc_size\n"
+              "#define PLATFORM_64BITS 1\n"
+              "#define VALVE_LITTLE_ENDIAN 1\n"
+          )
+          p.write_text(header_prefix + ptxt)
+
+          dbg = pathlib.Path("public/tier0/dbg.h")
+          if dbg.exists():
+              dtxt = dbg.read_text(errors="ignore")
+              dtxt = dtxt.replace('"int $3"', '"brk #0"').replace('"int 3"', '"brk #0"')
+              dbg.write_text(dtxt)
+
+          m = pathlib.Path("public/mathlib/mathlib.h")
+          mlines = m.read_text(errors="ignore").splitlines()
+          for idx, line in enumerate(mlines):
+              if "Unknown architecture" in line:
+                  mlines[idx] = "// " + line
+              elif '"=t"' in line:
+                  for k in range(max(0, idx-3), min(len(mlines), idx+3)):
+                      if any(w in mlines[k] for w in ["asm", "fsincos", "=t", "radians"]):
+                          mlines[k] = "// " + mlines[k]
+                  mlines[idx] = "*sine = sinf(radians); *cosine = cosf(radians);"
+              elif '"fistpl %0;"' in line:
+                  mlines[idx-1] = "// " + mlines[idx-1]
+                  mlines[idx]   = "*((int64*)nResult) = (int64)lrintf(f);"
+                  mlines[idx+1] = "// " + mlines[idx+1]
+          m.write_text("#include <cmath>\n" + "\n".join(mlines))
+
+          t = pathlib.Path("public/tier0/threadtools.h")
+          ttxt = t.read_text(errors="ignore")
+          ttxt = ttxt.replace("COMPILE_TIME_ASSERT( sizeof(T) == sizeof(long) );", "")
+          ttxt = ttxt.replace('"pause"', '"yield"')
+          t.write_text(ttxt)
+
+          sse = pathlib.Path("mathlib/sse.cpp")
+          if sse.exists():
+              sse.write_text("// Disabled x86 inline SSE asm for arm64 iOS\n")
+
+          for st in pathlib.Path(".").rglob("strtools.cpp"):
+              stxt = st.read_text(errors="ignore")
+              stxt = stxt.replace("conv_t > 0", "conv_t != (iconv_t)-1")
+              stxt = stxt.replace("conv_t < 0", "conv_t == (iconv_t)-1")
+              st.write_text(stxt)
+
+          for pd in pathlib.Path(".").rglob("processor_detect_linux.cpp"):
+              pd.write_text(
+                  "bool CheckMMXTechnology(void) { return false; }\n"
+                  "bool CheckSSETechnology(void) { return false; }\n"
+                  "bool CheckSSE2Technology(void) { return false; }\n"
+                  "bool Check3DNowTechnology(void) { return false; }\n"
+              )
+
+          for rt in pathlib.Path(".").rglob("reliabletimer.cpp"):
+              rlines = rt.read_text(errors="ignore").splitlines()
+              for idx, line in enumerate(rlines):
+                  if '"=A"' in line or "'=A'" in line:
+                      for k in range(max(0, idx-2), min(len(rlines), idx+3)):
+                          if any(w in rlines[k] for w in ["asm", "rdtsc", "=A", ");"]):
+                              rlines[k] = "// " + rlines[k]
+                      rlines[idx] = "return mach_absolute_time();"
+              rt.write_text("#include <mach/mach_time.h>\n" + "\n".join(rlines))
+
+          for fpath in ("public/tier1/interface.h", "tier1/interface.cpp"):
+              ih = pathlib.Path(fpath)
+              if ih.exists():
+                  itxt = ih.read_text(errors="ignore")
+                  itxt = re.sub(r'typedef\s+\w+(?:\s+\w+)?\s+HMODULE\s*;', 'typedef void* HMODULE;', itxt)
+                  itxt = re.sub(r'#define\s+HMODULE\s+.*', 'typedef void* HMODULE;', itxt)
+                  ih.write_text(itxt)
+
+          for mp in pathlib.Path(".").rglob("mempool.h"):
+              mplines = mp.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 455), min(len(mplines), 466)):
+                  mplines[idx] = re.sub(r'\bunsigned(?:\s+int)?\b', 'uintptr_t', mplines[idx])
+                  mplines[idx] = re.sub(r'\buint\w*\b', 'uintptr_t', mplines[idx])
+              mp.write_text("#include <stdint.h>\n" + "\n".join(mplines))
+
+          for kv in pathlib.Path(".").rglob("kvpacker.cpp"):
+              klines = kv.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 144), min(len(klines), 152)):
+                  klines[idx] = re.sub(r'\(\s*int\s*\)', '(intptr_t)', klines[idx])
+              kv.write_text("#include <stdint.h>\n" + "\n".join(klines))
+
+          for dm in pathlib.Path(".").rglob("datamanager.h"):
+              dlines = dm.read_text(errors="ignore").splitlines()
+              if len(dlines) > 253:
+                  dlines = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dlines)
+              dm.write_text("#include <stdint.h>\n" + "\n".join(dlines))
+
+          for cc in pathlib.Path(".").rglob("checksum_crc.cpp"):
+              clines = cc.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 146), min(len(clines), 154)):
+                  clines[idx] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', clines[idx])
+              cc.write_text("#include <stdint.h>\n" + "\n".join(clines))
+
+          for uh in pathlib.Path(".").rglob("utlhash.h"):
+              utxt = uh.read_text(errors="ignore")
+              utxt = re.sub(r'typedef\s+\w+\s+UtlHashFixedHandle_t\s*;', 'typedef intptr_t UtlHashFixedHandle_t;', utxt)
+              uh.write_text("#include <stdint.h>\n" + utxt)
+
+          for kvc in pathlib.Path(".").rglob("KeyValues.cpp"):
+              kvlines = kvc.read_text(errors="ignore").splitlines()
+              for idx in range(max(0, 2520), min(len(kvlines), 2536)):
+                  kvlines[idx] = re.sub(r'\b(?:unsigned\s+)?int\b|\buint\w*\b', 'intptr_t', kvlines[idx])
+              kvc.write_text("#include <stdint.h>\n" + "\n".join(kvlines))
+
+          for vh in pathlib.Path(".").rglob("VGUI.h"):
+              vtxt = vh.read_text(errors="ignore")
+              vtxt = re.sub(r'typedef\s+unsigned\s+int\s+VPANEL\s*;', 'typedef uintptr_t VPANEL;', vtxt)
+              vh.write_text("#include <stdint.h>\n" + vtxt)
+          EOF
+
+          sed -i '' 's|/home/runner/|/Users/runner/|g' games.xcodeproj/project.pbxproj
+          sed -i '' 's|MACOSX_DEPLOYMENT_TARGET.*|IPHONEOS_DEPLOYMENT_TARGET = 13.0;|g' devtools/*.xcconfig || true
+          sed -i '' 's|ARCHS = .*|ARCHS = arm64;|g' devtools/*.xcconfig || true
+          sed -i '' 's|SDKROOT = .*|SDKROOT = iphoneos;|g' devtools/*.xcconfig || true
+          sed -i '' 's|CC = .*||g; s|CPLUSPLUS = .*||g' devtools/*.xcconfig || true
+          sed -i '' 's|-msse[0-9.]*||g; s|-mfpmath=sse||g; s|-arch i386||g; s|-arch x86_64||g; s|-m32||g' devtools/*.xcconfig games.xcodeproj/project.pbxproj || true
+          SHIM_PATH="$(pwd)/arm64_shims"
+          xcodebuild -project games.xcodeproj \
+            -alltargets \
+            -configuration Release \
+            -sdk iphoneos \
+            ARCHS="arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            IPHONEOS_DEPLOYMENT_TARGET="13.0" \
+            CODE_SIGNING_ALLOWED=NO \
+            OTHER_CFLAGS="\$(inherited) -isystem $SHIM_PATH -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $SHIM_PATH -std=gnu++11 -fpermissive -Wno-error -DNO_STEAM -D_LINUX -DPOSIX -DNO_MALLOC_OVERRIDE -D__x86_64__" \
+            OTHER_LDFLAGS="\$(inherited) -undefined dynamic_lookup" \
+            build > xcode.log 2>&1 || true
+            echo "=== UNIQUE SHORT ERRORS ==="
+            grep -E "error:|fatal error:" xcode.log | sed 's|.*/src/||' | sort -u | head -n 15
+    - name: Collect & Pseudo-Sign Dylibs for iOS
+            run: |
+            mkdir -p final_ios_dylibs
+            cp hl2sb-src-master/src/xcode.log final_ios_dylibs/xcode.log || true
+            find . ~/Library/Developer/Xcode/DerivedData -type f \( -name "client.dylib" -o -name "client.so" -o -name "client" \) -exec cp {} final_ios_dylibs/client.dylib ; 2>/dev/null || true
+            find . ~/Library/Developer/Xcode/DerivedData -type f \( -name "server.dylib" -o -name "server.so" -o -name "server" \) -exec cp {} final_ios_dylibs/server.dylib ; 2>/dev/null || true
+            ldid -S final_ios_dylibs/*.dylib || true
+            ls -lh final_ios_dylibs/
+    - name: Upload iOS arm64 Dylibs
+            uses: actions/upload-artifact@v4
+            with:
+    - name: hl2sbpp-ios-arm64-dylibs
+            path: final_ios_dylibs/*
