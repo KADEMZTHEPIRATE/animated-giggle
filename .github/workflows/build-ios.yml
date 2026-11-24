@@ -89,7 +89,7 @@ jobs:
               kv.write_text("#include <stdint.h>\n" + "\n".join(kl))
           for dm in pathlib.Path(".").rglob("datamanager.h"):
               dl = dm.read_text(errors="ignore").splitlines()
-              if len(dl) > 253: dl = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dl)
+              if len(dl) > 253: dl[253] = re.sub(r'\bunsigned\s+int\b|\buint\w*\b', 'uintptr_t', dl[253])
               dm.write_text("#include <stdint.h>\n" + "\n".join(dl))
           for cc in pathlib.Path(".").rglob("checksum_crc.cpp"):
               cl = cc.read_text(errors="ignore").splitlines()
